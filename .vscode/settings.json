@@ -1,0 +1,13 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/user/Desktop/os-lab/xv6-riscv-riscv",
+            "binaryPath": "/home/user/Desktop/os-lab/xv6-riscv-riscv/kernel/kernel",
+            "binaryArgs": []
+        }
+    ],
+    "files.associations": {
+        "proc.h": "c",
+        "riscv.h": "c"
+    }
+}

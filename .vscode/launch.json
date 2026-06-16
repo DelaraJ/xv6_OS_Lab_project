@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug xv6 RISC-V",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/kernel/kernel",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb-multiarch",
+            "setupCommands": [
+                {
+                    "description": "Add safe path for .gdbinit",
+                    "text": "set auto-load safe-path /",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set RISC-V architecture",
+                    "text": "set architecture riscv:rv64",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "Connect to QEMU",
+                    "text": "target remote :26000",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "Load kernel symbols with full path",
+                    "text": "file ${workspaceFolder}/kernel/kernel",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "Break at main",
+                    "text": "break main",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Continue execution",
+                    "text": "continue",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

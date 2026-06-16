@@ -1,0 +1,38 @@
+{
+    "configurations": [
+        {
+            "name": "xv6-riscv",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/kernel",
+                "${workspaceFolder}/user",
+                "${workspaceFolder}/include"
+            ],
+            "defines": [
+                "__GNUC__",
+                "__riscv",
+                "__riscv_xlen=64",
+                "RISCV"
+            ],
+            "compilerPath": "/usr/bin/riscv64-unknown-elf-gcc",
+            "cStandard": "c99",
+            "cppStandard": "gnu++98",
+            "intelliSenseMode": "gcc-x86",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "compilerArgs": [
+                "-Wall",
+                "-Werror", 
+                "-O",
+                "-fno-omit-frame-pointer",
+                "-ggdb",
+                "-mcmodel=medany",
+                "-ffreestanding",
+                "-fno-common",
+                "-nostdlib",
+                "-fno-stack-protector",
+                "-I."
+            ]
+        }
+    ],
+    "version": 4
+}
