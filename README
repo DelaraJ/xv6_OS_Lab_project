@@ -7,7 +7,14 @@
 
 همانطور که در تصویر خروجی مشخص است، موقع بوت خطوط kreftest: را میبینیم با مقادیر مطابق کامنت‌ های expect ....
 
+## تغییر fork برای COW به‌جای کپی فیزیکی
+در uvmcopy (در vm.c)، خط kalloc() + memmove() را حذف کردم و به جای آن همان آدرس فیزیکی والد (pa) را در page table فرزند mappages کردم(با فلگ‌ هایی که PTE_W را خاموش کرده و یک فلگ جدید PTE_COW (یکی از بیت‌ های رزرو‌ شده‌ ی PTE در RISC-V) را روشن میکنند) سپس همین فلگ PTE_W را در page table والد هم خاموش کردم چون والد هم باید از این به بعد روی همین صفحه‌ی مشترک فقط بخواند. در پایان incref(pa) زدم چون الان دو page table به یک صفحه‌ ی فیزیکی اشاره میکنند.
+PTE_COW را در riscv.h تعریف کردم.
+بنابراین در کل در این بخش uvmcopy دیگه کپی فیزیکی نمیکند، صفحه را shared میکند، PTE_W رو خاموش و PTE_COW رو روشن میکند (هم در فرزند هم در والد)، و incref میزند. uvmunmap هم به‌ جای kfree مستقیم، حالا decref صدا میزند (چون صفحات ممکن است shared باشند).
 
+![alt](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/2.png)
+
+در این تصویر میبینیم که با اضافه کردن این بخش ها همچنان کرنل در بوت crash نمیکند.
 
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
