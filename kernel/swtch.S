@@ -4,9 +4,6 @@
 # 
 # Save current registers in old. Load from new.	
 
-# a0 -> old reg
-# a1 -> new reg
-
 
 .globl swtch
 swtch:
@@ -40,6 +37,6 @@ swtch:
         ld s10, 96(a1)
         ld s11, 104(a1)
         
-        ret ; jump to address in ra (که تازه بارگذاری شده)
+        ret
 
 	

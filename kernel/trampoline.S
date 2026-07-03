@@ -19,10 +19,7 @@
 trampoline:
 .align 4
 .globl uservec
-uservec:   
-
-# اینجا CPU قبلاً به این آدرس پرش کرده (pc = stvec)
-# و sepc قبلاً ذخیره شده
+uservec:    
 	#
         # trap.c sets stvec to point here, so
         # traps from user space start here,
@@ -38,7 +35,6 @@ uservec:
         # but it's mapped to the same virtual address
         # (TRAPFRAME) in every process's user page table.
         li a0, TRAPFRAME
-        # a0 = آدرس trapframe
         
         # save the user registers in TRAPFRAME
         sd ra, 40(a0)
@@ -80,11 +76,10 @@ uservec:
         ld sp, 8(a0)
 
         # make tp hold the current hartid, from p->trapframe->kernel_hartid
-        ld tp, 32(a0)  # trapframe.sstatus = sstatus
+        ld tp, 32(a0)
 
-        # load the address of usertrap()
-        # , from p->trapframe->kernel_trap
-        ld t0, 16(a0) # kernel_trap = usertrap
+        # load the address of usertrap(), from p->trapframe->kernel_trap
+        ld t0, 16(a0)
 
         # fetch the kernel page table address, from p->trapframe->kernel_satp.
         ld t1, 0(a0)
@@ -99,28 +94,20 @@ uservec:
         # flush now-stale user entries from the TLB.
         sfence.vma zero, zero
 
-        # t0 = usertrap()
         # call usertrap()
         jalr t0
 
 .globl userret
 userret:
-        # همه اطلاعات رو از trapframe page لود میکنه
         # usertrap() returns here, with user satp in a0.
         # return from kernel to user.
 
         # switch to the user page table.
         sfence.vma zero, zero
-        csrw satp, a0 ;بارگذاری پیج تیبل یوزر
+        csrw satp, a0
         sfence.vma zero, zero
 
-        # اینجا از کرنل پیج تیبل خارج میشیم
-        # مشکلی هم پیش نمیاد چون این ترامپولین همه جا یکیه. توی آردس پیج آخره
-
-        li a0, TRAPFRAME ; آدرس ترپ فریم رو در اون بریز
-        # TRAPFRAME = آدرس ثابتی که ترپ فریم در آن قرار داره
-        # این آدرس همه جا به یک صفحه ی فیزی کی نگاشت شده
-        # بخاطر همین قابل دسترسیه حتی با تغییر satp
+        li a0, TRAPFRAME
 
         # restore all but a0 from TRAPFRAME
         ld ra, 40(a0)
@@ -132,7 +119,6 @@ userret:
         ld t2, 88(a0)
         ld s0, 96(a0)
         ld s1, 104(a0)
-        # اینجا باید 112 a0 میبود
         ld a1, 120(a0)
         ld a2, 128(a0)
         ld a3, 136(a0)
@@ -160,11 +146,4 @@ userret:
         
         # return to user mode and user pc.
         # usertrapret() set up sstatus and sepc.
-        # هم مود هم آدرس عوض میشه
-        # user mode
-        # user pc -> sepc
-        # که برای اولین بار توی kexec
-        # مقدار  elf.entry = آدرس شروع کد های اجراییش
-
         sret
-        # الان دیگه کنترل دست پراسسه
