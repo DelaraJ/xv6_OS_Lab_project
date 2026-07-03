@@ -84,14 +84,12 @@ uartwrite(char buf[], int n)
 
   int i = 0;
   while(i < n){ 
-    // میگه تا وقتی که قبلی هنوز ارسال نشده اسلیپ کن
-    // هروقت ارسال شد اینتراپت میخوره دیگه، بیدار میشه
     while(tx_busy != 0){
       // wait for a UART transmit-complete interrupt
       // to set tx_busy to 0.
       sleep(&tx_chan, &tx_lock);
     }   
-    // اون یه کارکتر رو مینویسه توی رجیستر ارسال یوارت  
+      
     WriteReg(THR, buf[i]);
     i += 1;
     tx_busy = 1;
@@ -147,30 +145,18 @@ uartintr(void)
   ReadReg(ISR); // acknowledge the interrupt
 
   acquire(&tx_lock);
-  // اینتراپت واسط یوارت دو حالت داره
-  // یک : داده ای که تو رجیسترش نوشته بودیم ارسال بشه، ارسالش تموم میشه
-  // دو : دیتایی که دریافت کرد، یه بایت دریافت کرد تموم شد اینتراپت میخوره
-
-  // این برای بخشیه که یه بایتی رو نوشتیم ارسال کرده تموم شده
   if(ReadReg(LSR) & LSR_TX_IDLE){
     // UART finished transmitting; wake up sending thread.
     tx_busy = 0;
-    // کسایی که میخوان ارسال کنن رو بیدار میکنه
-    // یعنی آماده ارسال بعدی هستیم
     wakeup(&tx_chan);
   }
   release(&tx_lock);
 
-  //برای رید
   // read and process incoming characters.
   while(1){
-    // هرچند تا بایت رسیده همه رو یه بایت یه بایت میخونه از رجیسترش
     int c = uartgetc();
-    // اگر داده ای نرسیده بود(بخاطر آیدل رایت بوده باشه یعنی ارسال تموم شده باشه)
     if(c == -1)
       break;
-
-    //بعد پاسش میده اینجا اون یه بایت رو
     consoleintr(c);
   }
 }

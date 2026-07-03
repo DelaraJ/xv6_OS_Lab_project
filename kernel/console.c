@@ -33,12 +33,6 @@
 void
 consputc(int c)
 {
-    // توی consolewrite
-    // اگر یکی ارسالش تموم نشده باشه اسلیپ میشه
-    // اینجا بحای اسلیپ توی وایلی busy waiting میشه اسلیپ نمیشه
-    // دیگه منتظر اینتراپت نمیمونه
-    // همون لحظه که از رجیستر آیدل بشه مقدارش، کارکتر رو رایت میکنه به کاربر
-    // این برای سریع تر شدن برگشته هست
   if(c == BACKSPACE){
     // if the user typed backspace, overwrite with a space.
     uartputc_sync('\b'); uartputc_sync(' '); uartputc_sync('\b');
@@ -63,7 +57,6 @@ struct {
 //
 int
 consolewrite(int user_src, uint64 src, int n)
-// یه بافر از کاربر گرفته میاد تا اون ان تایی که کاربر گفته بفرست
 {
   char buf[32];
   int i = 0;
@@ -72,7 +65,6 @@ consolewrite(int user_src, uint64 src, int n)
     int nn = sizeof(buf);
     if(nn > n - i)
       nn = n - i;
-      // اول توی buf کپی میکنه
     if(either_copyin(buf, user_src, src+i, nn) == -1)
       break;
     uartwrite(buf, nn);
@@ -89,8 +81,6 @@ consolewrite(int user_src, uint64 src, int n)
 // or kernel address.
 //
 int
-// یه بافر از کاربر گرفته 
-// و میزانی که باید ازش بخونه
 consoleread(int user_dst, uint64 dst, int n)
 {
   uint target;
@@ -102,17 +92,15 @@ consoleread(int user_dst, uint64 dst, int n)
   while(n > 0){
     // wait until interrupt handler has put some
     // input into cons.buffer.
-    while(cons.r == cons.w){ // این یعنی سر و تهش برابره = بافرمون خالیه
+    while(cons.r == cons.w){
       if(killed(myproc())){
         release(&cons.lock);
         return -1;
       }
-      sleep(&cons.r, &cons.lock); // پشت cons.r بخواب هروقت اینتراپتی رسید تورو بیدار میکنیم
-      // هروقت یه خط کاملو گرفته باشه ازین اسلیپه بیدار میشه
+      sleep(&cons.r, &cons.lock);
     }
 
     c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
-    // کارکتر به کارکتر میخونه میره جلو
 
     if(c == C('D')){  // end-of-file
       if(n < target){
@@ -125,7 +113,6 @@ consoleread(int user_dst, uint64 dst, int n)
 
     // copy the input byte to the user-space buffer.
     cbuf = c;
-    // هر کارکتری که میخونه کپی میزنه به بافر user_dst
     if(either_copyout(user_dst, dst, &cbuf, 1) == -1)
       break;
 
@@ -139,9 +126,7 @@ consoleread(int user_dst, uint64 dst, int n)
     }
   }
   release(&cons.lock);
-  // انگاری کل دستورو برمیگردونه به شل
-  // یعنی الان دیگه کل دستورو شل خوند از واسط سریال(کنسول) 
-  // بعد دیکه اون پردازش میکنه و درجواب console_Write میکنه 
+
   return target - n;
 }
 
@@ -179,24 +164,15 @@ consoleintr(int c)
       c = (c == '\r') ? '\n' : c;
 
       // echo back to the user.
-      // کارکتری که گرفتیم رو به کاربر پس میدیم که تو کنسول ببینه چی نوشته 
-      // ولی consolewrite رو صدا نزده که
-      // توی consolewrite
-      // اگر یکی ارسالش تموم نشده باشه اسلیپ میشه
-      // اینجا بحای اسلیپ توی وایلی busy waiting میشه اسلیپ نمیشه
       consputc(c);
 
       // store for consumption by consoleread().
-      // یه بایتی که گرفته رو داخل بافره مینویسه
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
-      // ولی تا وقتی که به انتهای لاین برسه کسی رو بیدار نمیکنه
-      // تا وقتی که کاربر یه دستور کامل زد و اینتر زد
       if(c == '\n' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
         // wake up consoleread() if a whole line (or end-of-file)
         // has arrived.
         cons.w = cons.e;
-        // حالا همه کسایی که منتظر خوندن بافر بودنو بیدار میکنه
         wakeup(&cons.r);
       }
     }

@@ -213,8 +213,6 @@ alloc3_desc(int *idx)
 }
 
 void
-// پار امتر دوم اگر صفر باشه -> میخونیم
-// یک باشه یک بلوک میخوایم بنویسیم
 virtio_disk_rw(struct buf *b, int write)
 {
   uint64 sector = b->blockno * (BSIZE / 512);

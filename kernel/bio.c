@@ -63,8 +63,6 @@ bget(uint dev, uint blockno)
   acquire(&bcache.lock);
 
   // Is the block already cached?
-  // اول میبینه که آیا توی لینک لیستمون قبلا لود شده یا نه
-  // یعنی این بلوک قبلا کش شده یا نه
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
@@ -77,11 +75,9 @@ bget(uint dev, uint blockno)
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    // اگر نه، میاد میگرده دنبال یه بافری تو لینک لیسته که کسی استفاده نکرده
     if(b->refcnt == 0) {
       b->dev = dev;
       b->blockno = blockno;
-      // هنوز دیتارو نخونده پس:
       b->valid = 0;
       b->refcnt = 1;
       release(&bcache.lock);
@@ -97,13 +93,9 @@ struct buf*
 bread(uint dev, uint blockno)
 {
   struct buf *b;
-  // با bget یه خونه ار کشمون میگیریم
-  b = bget(dev, blockno);
-  if(!b->valid) {  
-    // ولید اشاره میکنه به سینک بودن استراکت و دیسک
-    // (شماره بهش اختضاض دادیم ولی هنوز دیتاش رو نخوندیم)
 
-    // اگر ولید نیست دیتارو بخون و ولید رو یک کن
+  b = bget(dev, blockno);
+  if(!b->valid) {
     virtio_disk_rw(b, 0);
     b->valid = 1;
   }
@@ -111,7 +103,6 @@ bread(uint dev, uint blockno)
 }
 
 // Write b's contents to disk.  Must be locked.
-// اینم همونه 
 void
 bwrite(struct buf *b)
 {

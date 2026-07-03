@@ -23,19 +23,77 @@ struct {
   struct run *freelist;
 } kmem;
 
+// --- Phase 1: reference counting infrastructure for COW fork ---
+//
+// One entry per physical page in [KERNBASE, PHYSTOP). Protected by
+// its own lock (reflock), separate from kmem.lock.
+struct spinlock reflock;
+int page_ref[(PHYSTOP - KERNBASE) / PGSIZE];
+
+// Convert a physical address into an index into page_ref[].
+#define PA2IDX(pa) (((uint64)(pa) - KERNBASE) / PGSIZE)
+
+// Increment the reference count of the physical page at pa.
+void
+incref(uint64 pa)
+{
+  if(pa < KERNBASE || pa >= PHYSTOP)
+    panic("incref: bad pa");
+
+  acquire(&reflock);
+  page_ref[PA2IDX(pa)]++;
+  release(&reflock);
+}
+
+// Decrement the reference count of the physical page at pa.
+// If it drops to zero, actually free the page via kfree().
+void
+decref(uint64 pa)
+{
+  int c;
+
+  if(pa < KERNBASE || pa >= PHYSTOP)
+    panic("decref: bad pa");
+
+  acquire(&reflock);
+  c = --page_ref[PA2IDX(pa)];
+  release(&reflock);
+
+  if(c < 0)
+    panic("decref: negative refcount");
+  if(c == 0)
+    kfree((void*)pa);
+}
+
+// Read the current reference count of the physical page at pa.
+int
+getref(uint64 pa)
+{
+  int c;
+
+  if(pa < KERNBASE || pa >= PHYSTOP)
+    return 0;
+
+  acquire(&reflock);
+  c = page_ref[PA2IDX(pa)];
+  release(&reflock);
+  return c;
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP); //  از ته فایل لینکر kernel.ld تا 128مگ
+  initlock(&reflock, "reflock");
+  freerange(end, (void*)PHYSTOP);
 }
 
 void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start); // آدرس شروع رند بشه به 4096 تایی
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) //4096 تا 4096 تا جلو میره وپوینترشو میفرسته به تابع
+  p = (char*)PGROUNDUP((uint64)pa_start);
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
 }
 
@@ -44,7 +102,7 @@ freerange(void *pa_start, void *pa_end)
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
 void
-kfree(void *pa) // پیجی که بهش دادیم رو ریلیز میکنه
+kfree(void *pa)
 {
   struct run *r;
 
@@ -52,13 +110,13 @@ kfree(void *pa) // پیجی که بهش دادیم رو ریلیز میکنه
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE); // پیج رو با یک پر میکنه که داده اپ قبلی پاک بشه
+  memset(pa, 1, PGSIZE);
 
-  r = (struct run*)pa; // داره pa رو به یه پوینتر تبدیل میکنه که بتونه به لیست اضافه کنه
+  r = (struct run*)pa;
 
-  acquire(&kmem.lock); // دونفر همزمان لیستو دست نزنن
-  r->next = kmem.freelist; // به ابتدای لینک لیست اضافه میکنیم
-  kmem.freelist = r; // فری لیست به یک پیج ای اشاره داره
+  acquire(&kmem.lock);
+  r->next = kmem.freelist;
+  kmem.freelist = r;
   release(&kmem.lock);
 }
 
@@ -71,12 +129,47 @@ kalloc(void)
   struct run *r;
 
   acquire(&kmem.lock);
-  r = kmem.freelist; // اولین پیج توی لیست
-  if(r) // اگر صفر باشه یعنی هیچ پیجی وجود نداره
+  r = kmem.freelist;
+  if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r) // اگر پیج رو گرفته باشه مفدار داره
-    memset((char*)r, 5, PGSIZE); // fill with junk // پاک کردن محتویات
-  return (void*)r; // در نهایت آدرس پیج رو خروجی میدیم
+  if(r) {
+    memset((char*)r, 5, PGSIZE); // fill with junk
+    page_ref[PA2IDX((uint64)r)] = 1;
+  }
+  return (void*)r;
+}
+
+// --- Phase 1 test helper -----------------------------------------
+// Temporary boot-time sanity check for the refcounting logic, called
+// once from main.c. Allocates a few pages, bumps/drops their
+// refcounts by hand (as fork/exit will do later), and prints the
+// results so we can eyeball that incref/decref/getref behave.
+// Safe to leave in the tree; it does not run unless kreftest() is
+// called explicitly.
+void
+kreftest(void)
+{
+  void *a = kalloc();
+  void *b = kalloc();
+
+  printf("kreftest: a=%p ref=%d (expect 1)\n", a, getref((uint64)a));
+  printf("kreftest: b=%p ref=%d (expect 1)\n", b, getref((uint64)b));
+
+  incref((uint64)a);
+  incref((uint64)a);
+  printf("kreftest: after 2x incref(a) ref=%d (expect 3)\n", getref((uint64)a));
+
+  decref((uint64)a);
+  printf("kreftest: after 1x decref(a) ref=%d (expect 2)\n", getref((uint64)a));
+
+  decref((uint64)a);
+  decref((uint64)a); // this last one should actually free the page
+  printf("kreftest: after dropping to 0, ref=%d (expect 0)\n", getref((uint64)a));
+
+  decref((uint64)b); // b had ref=1, this frees it too
+  printf("kreftest: b freed, ref=%d (expect 0)\n", getref((uint64)b));
+
+  printf("kreftest: done\n");
 }

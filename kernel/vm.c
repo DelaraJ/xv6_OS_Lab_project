@@ -36,19 +36,13 @@ kvmmake(void)
   kvmmap(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
 
   // map kernel text executable and read-only.
-  kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X); 
-  // کد کرنل رو از بخش بعدی که داده هاش هستن جدا کرده
-  // که فقط بخش کد پرمیشن اجرا داشته باشه
+  kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
 
   // map kernel data and the physical RAM we'll make use of.
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
 
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
-  // این دیگه توی بالاترین قسمت ویرچوال آدرس در کرنل هست
-  // متغیر ترامپولین توی trampoline.S تعریف شده
-  // کدی که توشه کد context-switch
-  // همه اینو یجا تعریف میکنن (ته حافظه) که با تعویض پیج ها مشکلی پیش نیاد
   kvmmap(kpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 
   // allocate and map a kernel stack for each process.
@@ -113,8 +107,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
-      memset(pagetable, 0, PGSIZE); // اطلاعات پاک میکنه
-      *pte = PA2PTE(pagetable) | PTE_V; // انتری لول قبلی رو که باید به پیج جدید اشاره کنه آپدیت میکنه(هم آدرسو میذاره هم ولیدش میکنه)
+      memset(pagetable, 0, PGSIZE);
+      *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
   return &pagetable[PX(0, va)];
@@ -133,14 +127,13 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
 
   pte = walk(pagetable, va, 0);    // Returns the entry in the third pt
-  if(pte == 0) // اگر صفر باشه یعنی پیج تیبل اون نگاشت رو نداره
+  if(pte == 0)
     return 0;
-  if((*pte & PTE_V) == 0) // نگاشته رو داشته ولی به جای ولیدی اشاره نمیکرده
+  if((*pte & PTE_V) == 0)
     return 0;
-  if((*pte & PTE_U) == 0) // یوزر دسترسی داشته باشه
+  if((*pte & PTE_U) == 0)
     return 0;
-  pa = PTE2PA(*pte); // اول فلگا از بین میره بعد 12 صفر به راستش اضافه میشه 
-  // PPN عه از محتواش آدرس فیزیکی پیج رو استخراج کنیم
+  pa = PTE2PA(*pte);
   return pa;
 }
 
@@ -169,11 +162,9 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V) // اگر فلگ ولید معتبر باشه یعنی قبلا این پیجو مپ کردیم
+    if(*pte & PTE_V)
       panic("mappages: remap");
-      // دوازده تا شیفت راست که آفست بپره
-      // ده تا به چپ که بعدا فلگ هارو or کنیم(توی ساختار پیج تیبل انتری ها اینجوری بود)
-    *pte = PA2PTE(pa) | perm | PTE_V; 
+    *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
     a += PGSIZE;
@@ -355,41 +346,30 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   pte_t *pte;
 
   while(len > 0){
-    va0 = PGROUNDDOWN(dstva); // آفست حذف میشه و آدرس پیج درمیاد
+    va0 = PGROUNDDOWN(dstva);
     if(va0 >= MAXVA)
       return -1;
   
-    pa0 = walkaddr(pagetable, va0); // آدرس فیزیکی dstv درومده الان
-    if(pa0 == 0) { // یعنی اون آدرسه نگاشت نشده بوده
-      if((pa0 = vmfault(pagetable, va0, 0)) == 0) { 
-        return -1; // نمی‌توان صفحه را تخصیص داد
+    pa0 = walkaddr(pagetable, va0);
+    if(pa0 == 0) {
+      if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
+        return -1;
       }
     }
 
-    pte = walk(pagetable, va0, 0); // انتری لول آخرو میده
+    pte = walk(pagetable, va0, 0);
     // forbid copyout over read-only user text pages.
     if((*pte & PTE_W) == 0)
       return -1;
       
-    n = PGSIZE - (dstva - va0); // از offset فعلی تا انتهای صفحه
+    n = PGSIZE - (dstva - va0);
     if(n > len)
-      n = len;// آخرین صفحه ممکن است کامل نباشد
-    // درواقع الان رسیدیم به min(n, len)
-
-
-    // کپی کردن داده ها
+      n = len;
     memmove((void *)(pa0 + (dstva - va0)), src, n);
-    // pa0 + (dstva - va0) = آدرس فیزیکی دقیق مقصد
-    // همون آدرس فیزیکال +(آدرس اصلیه منهای اولش = میزانی که بایدبریم بالا)
-    // src = آدرس منبع در کرنل
 
     len -= n;
     src += n;
     dstva = va0 + PGSIZE;
-    // ممکنه ادامه ی دیتاش یجای دیگه ای از مموری باشه پس 
-    // len ای که مونده حساب میشه
-    // src بره رو آدرسی که از اونجا به بعدش مونده
-    // dstv یه پیج بره جلو
   }
   return 0;
 }

@@ -33,7 +33,7 @@ trapinithart(void)
 // handle an interrupt, exception, or system call from user space.
 // called from, and returns to, trampoline.S
 // return value is user satp for trampoline.S to switch to.
-// هروقت اینتراپت رخ میده میایم اینجا
+//
 uint64
 usertrap(void)
 {
@@ -66,7 +66,6 @@ usertrap(void)
     intr_on();
 
     syscall();
-    // نوع اینتراپت از devintr میاد
   } else if((which_dev = devintr()) != 0){
     // ok
   } else if((r_scause() == 15 || r_scause() == 13) &&
@@ -82,13 +81,9 @@ usertrap(void)
     kexit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  // وقت پراسس برای اجرا تمومه
-  // باید کنترل سی پی یو رو ازش بگیریم و بدیم دست اسکجولر
-  // که یه پراسس دیگه هانتخاب کنه برای احرا
   if(which_dev == 2)
     yield();
 
-    // prepare_return to user space
   prepare_return();
 
   // the user page table to switch to, for trampoline.S
@@ -104,28 +99,20 @@ usertrap(void)
 void
 prepare_return(void)
 {
-  struct proc *p = myproc(); // پوینتر پراسس درحال اجرا رو میگیره
+  struct proc *p = myproc();
 
   // we're about to switch the destination of traps from
   // kerneltrap() to usertrap(). because a trap from kernel
   // code to usertrap would be a disaster, turn off interrupts.
-
-  //تغییر مقصد
-  // trapها
-  // از kerneltrap() به usertrap()
-  // تو حالت کرنلیم و نباید یه ترپ بیاد و بره به یوزرترپ
   intr_off();
 
   // send syscalls, interrupts, and exceptions to uservec in trampoline.S
-  //آدرس تابع اسمبلی uservector رو پیدا میکنه
   uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
   w_stvec(trampoline_uservec);
 
   // set up trapframe values that uservec will need when
   // the process next traps into the kernel.
-  // پنج تیبل کرنل رو میریزه توی trapframe که بعدا که برگشت بتونه دوباره لودش کنه
   p->trapframe->kernel_satp = r_satp();         // kernel page table
-  // همینطور آدرس استک پوینترش رو
   p->trapframe->kernel_sp = p->kstack + PGSIZE; // process's kernel stack
   p->trapframe->kernel_trap = (uint64)usertrap;
   p->trapframe->kernel_hartid = r_tp();         // hartid for cpuid()
@@ -140,11 +127,6 @@ prepare_return(void)
   w_sstatus(x);
 
   // set S Exception Program Counter to the saved user pc.
-  // Supervisor Exeption Program Counter
-  // sepc رو به آدرس برگشت برنامه یوزر تغییر میدیم
-  // قبلا پروگرم کانتر این پراسس توی epc ذخیره شده
-  // پس وقتی بخوایم sret بزنیم
-  // که یعنی از سوپروایزر ریترن کنیم، باید برگردیم به همونجایی که توی این پراسس داشتیم ران میکردیم
   w_sepc(p->trapframe->epc);
 }
 
@@ -205,7 +187,6 @@ devintr()
 {
   uint64 scause = r_scause();
 
-  // اگر scause این آدرس باشه میگیم یا دیسک اینتراپت خورده یا یوارت
   if(scause == 0x8000000000000009L){
     // this is a supervisor external interrupt, via PLIC.
 

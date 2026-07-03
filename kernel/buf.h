@@ -4,7 +4,7 @@ struct buf {
   uint dev;
   uint blockno;
   struct sleeplock lock;
-  uint refcnt; // میگه چند تا پراسس الان دارن از این بلوک استفاده میکنن
+  uint refcnt;
   struct buf *prev; // LRU cache list
   struct buf *next;
   uchar data[BSIZE];

@@ -1,4 +1,14 @@
-## test
+# گزارش کار
+## زیرساخت Reference Counting در kalloc.c
+ یک آرایه‌ی سراسری int page_ref[PHYSTOP / PGSIZE] (مشابه، با یک spinlock مخصوص خودش به نام reflock) اضافه کردم که برای هر صفحه فیزیکی شمارنده نگه دارد. سه تابع جدید نوشتم: incref(pa) که شمارنده را یک واحد زیاد میکند، decref(pa) که یک واحد کم میکند و اگر به صفر رسید واقعا kfree را صدا میزند، و یک ماکرو PA2IDX(pa) برای تبدیل آدرس فیزیکی به ایندکس آرایه. در kalloc() وقتی صفحه‌ ی جدید تخصیص می یابد، رفرنس‌ کانتش را ۱ قرار میدهم. در kfree() این تابع دیگر مستقیم صدا زده نمیشود از بیرون مگر وقتی رفرنس صفر شده (اگر رفرنس بالای صفر بود فقط کم کند و واقعا آزاد نکند).
+تست: تابع kreftest() را اضافه کردم که در بوت از main.c صدا زده میشود و چند خط printf با رفرنس‌ کانت‌ های مورد انتظار چاپ میکند.
+
+![alt text]("./Screenshot 2026-07-04 022304.png")
+
+همانطور که در تصویر خروجی مشخص است، موقع بوت خطوط kreftest: را میبینیم با مقادیر مطابق کامنت‌ های expect ....
+
+
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern RISC-V multiprocessor using ANSI C.

@@ -29,24 +29,17 @@ struct spinlock wait_lock;
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
-
-// توی فضای ویرچوال کرنل،توی قسمت بالای مموری، برای هر پراسس یه کرنل استک اختصاص میده
-// هر پراسس یه کرنل استک داره یه یوزر استک
 void
-proc_mapstacks(pagetable_t kpgtbl) 
+proc_mapstacks(pagetable_t kpgtbl)
 {
   struct proc *p;
   
-  for(p = proc; p < &proc[NPROC]; p++) { // به اندازه 64 تا پراسسی که همزمان میتونه اجرا کنه میره جلو
-    char *pa = kalloc(); // برای هر کدوم یه پیج میگیره
+  for(p = proc; p < &proc[NPROC]; p++) {
+    char *pa = kalloc();
     if(pa == 0)
       panic("kalloc");
-    uint64 va = KSTACK((int) (p - proc)); // آدرس ویرچوال استکو حساب میکنه
-    // p-proc که ایندکسو میده
-    // 0-1-2-...
-    // KSTACK یه ماکرو که آدرس ویرچوال رو بر اساس ورودیش حساب میکنه
-    kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);// آدرس پیج فیزیکی رو به آدرس مجازی به اندازه یک صفحه گارد مپ کن
-    // قابل خوندن و نوشتن هست ولی خب اجرا شدنی نیست
+    uint64 va = KSTACK((int) (p - proc));
+    kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
 }
 
@@ -151,11 +144,7 @@ found:
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
-  p->context.sp = p->kstack + PGSIZE;    
-  // استک از ته پر میشه، برای همین ادرس پوینترشو میذاریم آدرس آخر پیج
-  // kstack usually gets filled from its end. 
-  // So we find the address of its end and use a 
-  // reverse loop to get back.
+  p->context.sp = p->kstack + PGSIZE;    // kstack usually gets filled from its end. So we find the address of its end and use a reverse loop to get back.
 
   return p;
 }
@@ -234,7 +223,7 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
-  // تنظیم current working directory
+  
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
@@ -434,8 +423,7 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();    // returns the CPU that is currently running this
-  // سی پی یو ای که الان داره اینو ران میکنه رو میگیره
-  
+
   c->proc = 0;
   for(;;){
     // The most recent process to run may have had interrupts
@@ -443,8 +431,8 @@ scheduler(void)
     // processes are waiting. Then turn them back off
     // to avoid a possible race between an interrupt
     // and wfi.
-    intr_on(); // avoid a deadlock
-    intr_off(); // avoid race condition
+    intr_on();
+    intr_off();
 
     int found = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
@@ -466,9 +454,6 @@ scheduler(void)
     }
     if(found == 0) {
       // nothing to run; stop running on this core until an interrupt.
-
-      // wait for intrpt
-      // سی پی یو میخوابه(حالت کم مصرف) تا یه اینتراپتی بیدارش کنه
       asm volatile("wfi");    // Cuts the CPU power usage
     }
   }
@@ -497,8 +482,6 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  // کانتکست پراسس رو ذخیره میکنه و کانتکست سی پی یو رو لود میکنه
-  // الان میره جایی که سی پی یو از دست اسکجولر خارح شده بود(سوییچ)
   swtch(&p->context, &mycpu()->context);
   mycpu()->intena = intena;
 }
@@ -509,7 +492,6 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
-  // استیت پراسس از رانینگ میشه رانیبل
   p->state = RUNNABLE;
   sched();
   release(&p->lock);
@@ -517,8 +499,6 @@ yield(void)
 
 // A fork child's very first scheduling by scheduler()
 // will swtch to forkret.
-//مقداردهی‌های یک‌بار سیستمی و سپس پرش به مود کاربر
-// اولین کدی که از اولین پراسس اجرا میشه
 void
 forkret(void)
 {
@@ -527,18 +507,12 @@ forkret(void)
   struct proc *p = myproc();
 
   // Still holding p->lock from scheduler.
-  // قفل باید آزاد شود تا فرآیند بتواند بعداً دوباره قفل را بگیرد (مثلاً در yield)
   release(&p->lock);
 
-  if (first) { // فقط با اینیت پراسس اجرا میشه
+  if (first) {
     // File system initialization must be run in the context of a
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
-
-    // File system initialization
-    // این توش sleep() رو ممکنه صدا کنه مثلا برای خوندن دیسک
-    // باید تو یه پراسس معمولی اجرا شه اسلیپ
-    // نه تو main  که حالت بوته
     fsinit(ROOTDEV);
 
     first = 0;
@@ -547,12 +521,6 @@ forkret(void)
 
     // We can invoke kexec() now that file system is initialized.
     // Put the return value (argc) of kexec into a0.
-
-    
-    // kexec() 
-    // برنامه /init 
-    // را از دیسک بارگذاری می‌کند
-    // return value from kexec -> a0
     p->trapframe->a0 = kexec("/init", (char *[]){ "/init", 0 });
     if (p->trapframe->a0 == -1) {
       panic("exec");
@@ -560,21 +528,9 @@ forkret(void)
   }
 
   // return to user space, mimicing usertrap()'s return.
-  // برمیگرده به یوزر اسپیس
-  // شبیه خروج از trap
-  // درواقع فضای کرنل(رجیستر های سی پی یو رو تنظیم میکنه) رو برا برگشت به یوزر اسپیس اماده میکنه
-  // یعنی sepc و sstatus
-
-  // درکل آماده سازی که از یوزر کدی که توی سوپروایزر رانینگه
-  // سوییچ کنیم به یوزر کد توی یوزرمود
-  // درواقع کد های واقعی init رو میخوایم اجرا کنیم
-  // برای این سوییچ
-  // رجیستر ها و استک عوض میشه و توی trapframe ذخیره میشه
   prepare_return();
   uint64 satp = MAKE_SATP(p->pagetable);
-  // این داره آدرس تابع userret رو پیدا میکنه
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
-  // تابع userret رو با پارامتر satp اجرا میکنه
   ((void (*)(uint64))trampoline_userret)(satp);
 }
 
