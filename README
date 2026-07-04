@@ -1,9 +1,12 @@
-# گزارش کار
+<div dir="rtl" style="text-align: right;">
+
+# پیاده سازی Copy-on-Write (COW) در xv6
+
 ## زیرساخت Reference Counting در kalloc.c
  یک آرایه‌ی سراسری int page_ref[PHYSTOP / PGSIZE] (مشابه، با یک spinlock مخصوص خودش به نام reflock) اضافه کردم که برای هر صفحه فیزیکی شمارنده نگه دارد. سه تابع جدید نوشتم: incref(pa) که شمارنده را یک واحد زیاد میکند، decref(pa) که یک واحد کم میکند و اگر به صفر رسید واقعا kfree را صدا میزند، و یک ماکرو PA2IDX(pa) برای تبدیل آدرس فیزیکی به ایندکس آرایه. در kalloc() وقتی صفحه‌ ی جدید تخصیص می یابد، رفرنس‌ کانتش را ۱ قرار میدهم. در kfree() این تابع دیگر مستقیم صدا زده نمیشود از بیرون مگر وقتی رفرنس صفر شده (اگر رفرنس بالای صفر بود فقط کم کند و واقعا آزاد نکند).
 تست: تابع kreftest() را اضافه کردم که در بوت از main.c صدا زده میشود و چند خط printf با رفرنس‌ کانت‌ های مورد انتظار چاپ میکند.
 
-![alt](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/1.png)
+![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/1.png)
 
 همانطور که در تصویر خروجی مشخص است، موقع بوت خطوط kreftest: را میبینیم با مقادیر مطابق کامنت‌ های expect ....
 
@@ -12,55 +15,22 @@
 PTE_COW را در riscv.h تعریف کردم.
 بنابراین در کل در این بخش uvmcopy دیگه کپی فیزیکی نمیکند، صفحه را shared میکند، PTE_W رو خاموش و PTE_COW رو روشن میکند (هم در فرزند هم در والد)، و incref میزند. uvmunmap هم به‌ جای kfree مستقیم، حالا decref صدا میزند (چون صفحات ممکن است shared باشند).
 
-![alt](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/2.png)
+![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/2.png)
 
 در این تصویر میبینیم که با اضافه کردن این بخش ها همچنان کرنل در بوت crash نمیکند.
 
-xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
-Version 6 (v6).  xv6 loosely follows the structure and style of v6,
-but is implemented for a modern RISC-V multiprocessor using ANSI C.
+## گسترش vmfault برای مدیریت COW page fault
+اینجا تابع را splitمیکنیم به دو حالت: حالت فعلی (lazy allocation، وقتی صفحه اصلا map نشده) که دست‌ نخورده باقی میماند، و حالت جدید برای store fault روی صفحه ی COW: اگر getref==1 فقط PTE_W را بر میگردانیم (بدون کپی، optimization)، وگرنه صفحه ی جدید میگیریم و کپی میکنیم و decref روی صفحه ی قدیمی میزنیم به این صورت که، صفحه ی فیزیکی قدیم را پیدا میکنیم، یک صفحه ی جدید با kalloc() میگیریم، محتوا را با memmove کپی میکنیم PTE فرزند را آپدیت میکنیم تا به صفحه ی جدید با PTE_W روشن و PTE_COW خاموش اشاره کند، و decref روی صفحه ی قدیمی صدا میزنیم (چون دیگر این فرزند به آن اشاره نمیکند). اگر رفرنس کانت صفحه ی قدیمی از قبل ۱ بوده (یعنی فقط همین پروسه به آن اشاره داشته)، میتوان بجای کپی کردن، فقط PTE_W را روشن کنیم.
 
-ACKNOWLEDGMENTS
+تست:
+یک برنامه‌ی یوزر به نام cowtest.c نوشتم که این موقعیت ها را تست کنم:
+1.	 fork میزنیم و فرزند یک متغیر گلوبال/heap  را write میکنیم، سپس باید ببینیم که والد مقدار قدیمی را هنوز می‌بیند و فرزند مقدار جدید را
+2.	چند بار پشت سرهم fork میزنیم و هرکدام مقدار متفاوتی روی همان صفحه بنویسند، تا نشان دهیم reference counting  وقتی بیش از دو پروسه به یک صفحه اشاره دارند هم درست کار میکند
+3.	یک برنامه که حافظ ‌ی زیادی تخصیص دهد و fork بزند را مینویسیم تا نشان دهیم مصرف حافظ ‌ی فیزیکی واقعا کمتر از قبل COW است
+این تست ها را به UPROGS در Makefile نیز اضافه کردم
 
-xv6 is inspired by John Lions's Commentary on UNIX 6th Edition (Peer
-to Peer Communications; ISBN: 1-57398-013-7; 1st edition (June 14,
-2000)).  See also https://pdos.csail.mit.edu/6.1810/, which provides
-pointers to on-line resources for v6.
+![cowtest_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/images/3.png)
 
-The following people have made contributions: Russ Cox (context switching,
-locking), Cliff Frey (MP), Xiao Yu (MP), Nickolai Zeldovich, and Austin
-Clements.
+همه تست ها پاس شدند
 
-We are also grateful for the bug reports and patches contributed by
-Abhinavpatel00, Takahiro Aoyagi, Marcelo Arroyo, Hirbod Behnam, Silas
-Boyd-Wickizer, Anton Burtsev, carlclone, Ian Chen, clivezeng, Dan
-Cross, Cody Cutler, Mike CAT, Tej Chajed, Asami Doi,Wenyang Duan,
-echtwerner, eyalz800, Nelson Elhage, Saar Ettinger, Alice Ferrazzi,
-Nathaniel Filardo, flespark, Peter Froehlich, Yakir Goaron, Shivam
-Handa, Matt Harvey, Bryan Henry, jaichenhengjie, Jim Huang, Matúš
-Jókay, John Jolly, Alexander Kapshuk, Anders Kaseorg, kehao95,
-Wolfgang Keller, Jungwoo Kim, Jonathan Kimmitt, Eddie Kohler, Vadim
-Kolontsov, Austin Liew, l0stman, Pavan Maddamsetti, Imbar Marinescu,
-Yandong Mao, Matan Shabtay, Hitoshi Mitake, Carmi Merimovich,
-mes900903, Mark Morrissey, mtasm, Joel Nider, Hayato Ohhashi,
-OptimisticSide, papparapa, phosphagos, Harry Porter, Greg Price, Zheng
-qhuo, Quancheng, RayAndrew, Jude Rich, segfault, Ayan Shafqat, Eldar
-Sehayek, Yongming Shen, Fumiya Shigemitsu, snoire, Taojie, Cam Tenny,
-tyfkda, Warren Toomey, Stephen Tu, Alissa Tung, Rafael Ubal, unicornx,
-Amane Uehara, Pablo Ventura, Luc Videau, Xi Wang, WaheedHafez, Keiichi
-Watanabe, Lucas Wolf, Nicolas Wolovick, wxdao, Grant Wu, x653, Andy
-Zhang, Jindong Zhang, Icenowy Zheng, ZhUyU1997, and Zou Chang Wei.
-
-ERROR REPORTS
-
-Please send errors and suggestions to Frans Kaashoek and Robert Morris
-(kaashoek,rtm@mit.edu).  The main purpose of xv6 is as a teaching
-operating system for MIT's 6.1810, so we are more interested in
-simplifications and clarifications than new features.
-
-BUILDING AND RUNNING XV6
-
-You will need a RISC-V "newlib" tool chain from
-https://github.com/riscv/riscv-gnu-toolchain, and qemu compiled for
-riscv64-softmmu.  Once they are installed, and in your shell
-search path, you can run "make qemu".
+</div>

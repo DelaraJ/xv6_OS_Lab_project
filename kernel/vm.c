@@ -459,30 +459,75 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
-// allocate and map user memory if process is referencing a page
-// that was lazily allocated in sys_sbrk().
-// returns 0 if va is invalid or already mapped, or if
-// out of physical memory, and physical address if successful.
+// Handle a page fault at va. Two independent situations reach here:
+//
+//  1. Lazy allocation: the page was never mapped at all (e.g. sbrk
+//     grew p->sz without actually allocating). Original behavior,
+//     unchanged.
+//
+//  2. Phase 3 (COW): the page IS mapped, but read-only and tagged
+//     PTE_COW, and this was a write (store) fault -- i.e. read==0.
+//     We give the faulting process its own private, writable copy.
+//
+// `read` is 1 for a load fault (scause==13) and 0 for a store fault
+// (scause==15); see the call in usertrap().
+//
+// returns 0 on failure (invalid va, or out of memory), and the
+// physical address of the now-usable page on success.
 uint64
 vmfault(pagetable_t pagetable, uint64 va, int read)
 {
   uint64 mem;
   struct proc *p = myproc();
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
 
   if (va >= p->sz)
     return 0;
   va = PGROUNDDOWN(va);
-  if(ismapped(pagetable, va)) {
-    return 0;
+
+  pte = walk(pagetable, va, 0);
+
+  // Case 1: nothing mapped here yet -> lazy allocation.
+  if(pte == 0 || (*pte & PTE_V) == 0) {
+    mem = (uint64) kalloc();
+    if(mem == 0)
+      return 0;
+    memset((void *) mem, 0, PGSIZE);
+    if (mappages(p->pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0) {
+      kfree((void *)mem);
+      return 0;
+    }
+    return mem;
   }
+
+  // Case 2: page is mapped. Only a write fault on a COW page is
+  // something we know how to fix.
+  if(read || (*pte & PTE_COW) == 0)
+    return 0;
+
+  pa = PTE2PA(*pte);
+  flags = PTE_FLAGS(*pte);
+
+  if(getref(pa) == 1){
+    // We are the only process still pointing at this physical page
+    // (e.g. the other side of the fork already exited or already
+    // COW-faulted itself). Nobody else can observe it, so there's no
+    // need to copy -- just reclaim write access in place.
+    *pte = (*pte & ~PTE_COW) | PTE_W;
+    return pa;
+  }
+
+  // Still shared: allocate a private copy for this process only.
   mem = (uint64) kalloc();
   if(mem == 0)
     return 0;
-  memset((void *) mem, 0, PGSIZE);
-  if (mappages(p->pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0) {
-    kfree((void *)mem);
-    return 0;
-  }
+  memmove((void*)mem, (void*)pa, PGSIZE);
+
+  flags = (flags & ~PTE_COW) | PTE_W;
+  *pte = PA2PTE(mem) | flags;
+  decref(pa);
   return mem;
 }
 
