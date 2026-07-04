@@ -1,0 +1,3 @@
+کد کامل تصاویر و توضیحات در گیت هاب هم هستند.
+در فایل report.md در گیت هاب تصاویر به راحتی قابل بررسی هستند.
+https://github.com/DelaraJ/xv6_OS_Lab_project.git
