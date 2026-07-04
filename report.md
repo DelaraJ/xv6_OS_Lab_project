@@ -7,7 +7,7 @@
 تست: تابع kreftest() را اضافه کردم که در بوت از main.c صدا زده میشود و چند خط printf با رفرنس‌ کانت‌ های مورد انتظار چاپ میکند.
 
 <br><br>
-![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/1.png)
+![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/images/2.png)
 <br>
 
 همانطور که در تصویر خروجی مشخص است، موقع بوت خطوط kreftest: را میبینیم با مقادیر مطابق کامنت‌ های expect ....
@@ -18,7 +18,7 @@ PTE_COW را در riscv.h تعریف کردم.
 بنابراین در کل در این بخش uvmcopy دیگر کپی فیزیکی نمیکند، صفحه را shared میکند، PTE_W رو خاموش و PTE_COW رو روشن میکند (هم در فرزند هم در والد)، و incref میزند. uvmunmap هم به‌ جای kfree مستقیم، حالا decref صدا میزند (چون صفحات ممکن است shared باشند).
 
 <br><br>
-![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/2.png)
+![boot_Screenshot](https://raw.githubusercontent.com/DelaraJ/xv6_OS_Lab_project/main/images/2.png)
 <br>
 
 در این تصویر میبینیم که با اضافه کردن این بخش ها همچنان کرنل در بوت crash نمیکند.
