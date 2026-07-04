@@ -363,19 +363,30 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     va0 = PGROUNDDOWN(dstva);
     if(va0 >= MAXVA)
       return -1;
-  
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0) {
+
+    pte = walk(pagetable, va0, 0);
+    // Page not mapped yet (lazy alloc), not user-accessible (e.g. the
+    // trapframe/trampoline pages, which are mapped in the user page
+    // table but must never be written via copyout), or mapped but
+    // not writable (this covers both a COW page -- which vmfault()
+    // can resolve -- and a genuinely read-only page, which vmfault()
+    // will correctly refuse). In all of these cases, give vmfault()
+    // a chance before giving up.
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
+       (*pte & PTE_W) == 0){
       if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
         return -1;
       }
+      pte = walk(pagetable, va0, 0);
+    } else {
+      pa0 = PTE2PA(*pte);
     }
 
-    pte = walk(pagetable, va0, 0);
-    // forbid copyout over read-only user text pages.
-    if((*pte & PTE_W) == 0)
+    // forbid copyout over read-only user text pages, or any page
+    // that still isn't user-writable after the fault path above.
+    if((*pte & PTE_W) == 0 || (*pte & PTE_U) == 0)
       return -1;
-      
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
