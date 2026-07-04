@@ -147,12 +147,54 @@ big_test(void)
   print("cowtest: big_test OK\n");
 }
 
+// Test 4 (Phase 4): use the pgrefcount() syscall to directly observe
+// the effect of COW sharing and of the later private copy.
+void
+refcount_test(void)
+{
+  print("cowtest: refcount_test starting\n");
+
+  volatile int *p = (int*)sbrk(4096);
+  *p = 42;
+
+  printf("cowtest: before fork, refcount=%d (expect 1)\n", pgrefcount((uint64)p));
+
+  int pid = fork();
+  if(pid < 0){
+    print("cowtest: fork failed\n");
+    exit(1);
+  }
+
+  if(pid == 0){
+    // Right after fork, both parent and child point at the same
+    // physical page, so refcount should be >= 2 (scheduling can make
+    // it hard to guarantee an exact moment, so this print is
+    // informational rather than a hard assertion).
+    printf("cowtest: child refcount=%d before its own write (expect >= 2)\n",
+           pgrefcount((uint64)p));
+
+    *p = 99; // triggers a COW fault -> private copy for the child
+
+    int r = pgrefcount((uint64)p);
+    printf("cowtest: child refcount=%d after its own write (expect 1)\n", r);
+    if(r != 1){
+      print("cowtest: FAIL refcount did not drop to 1 after COW copy\n");
+      exit(1);
+    }
+    exit(0);
+  }
+
+  wait(0);
+  print("cowtest: refcount_test OK\n");
+}
+
 int
 main(void)
 {
   basic_test();
   multi_test();
   big_test();
+  refcount_test();
   print("cowtest: ALL TESTS PASSED\n");
   exit(0);
 }

@@ -105,3 +105,22 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// Phase 4: expose the physical page refcount for a user virtual
+// address, mainly so cowtest/demos can show COW sharing directly
+// (e.g. refcount 2+ right after fork, back to 1 after a write).
+uint64
+sys_pgrefcount(void)
+{
+  uint64 va;
+  uint64 pa;
+  struct proc *p = myproc();
+
+  argaddr(0, &va);
+
+  pa = walkaddr(p->pagetable, PGROUNDDOWN(va));
+  if(pa == 0)
+    return -1;
+
+  return getref(pa);
+}
